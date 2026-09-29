@@ -1,0 +1,1 @@
+- we are using an incremental encoder, so should zero and calibrate position first if want repeatability?
