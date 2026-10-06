@@ -73,11 +73,11 @@ void setup() {
 }
 
 //Motor 2 initialization
-void setup() {
+void setup2() {
   Serial.begin(230400);  // set baud rate for communication between USB & raspberry pi pico
   pinMode(ENCC, INPUT);
   pinMode(ENCD, INPUT);
-  attachInterrupt(digitalPinToInterrupt(ENCC), readEncoder, RISING);
+  attachInterrupt(digitalPinToInterrupt(ENCC), readEncoder2, RISING);
 
   // pwm and direction pins are outputs that go to the motor
   pinMode(PWM_pin2, OUTPUT);
@@ -144,7 +144,7 @@ void loop() {
 }
 
 // Motor 2 Proportional Control Loop
-void loop() {
+void loop2() {
 
   // Set a reference angle position for the motor. It will be in counts, so conversion is needed to degrees for output.
   // Will change by +/-360 degrees every time_per_rotation milliseconds
@@ -178,7 +178,7 @@ void loop() {
   } 
   
   // call setMotor function to drive the motor at a set direction and torque
-  setMotor(u_sign2, u_amplitude2, PWM_pin2, IN3, IN4);
+  setMotor2(u_sign2, u_amplitude2, PWM_pin2, IN3, IN4);
 
   // print target and position to see the response every print_interval times around the loop
   interval_count2 = interval_count2 + 1;
@@ -220,7 +220,7 @@ void setMotor(int dir, float pwmVal, int pwm_pin, int in1, int in2) {
 
 // Motor 2 function to send signal to motor driver (could also be defined at top of code)
 // set inputs and their classifications
-void setMotor(int dir2, float pwmVal2, int pwm_pin2, int in3, int in4) {
+void setMotor2(int dir2, float pwmVal2, int pwm_pin2, int in3, int in4) {
   //set the pwm pin to the appropriate level (0 - 255)
   analogWrite(pwm_pin2, pwmVal2);
   //set direction
@@ -247,7 +247,7 @@ void readEncoder() {
 }
 
 // Motor 2 Interrupt service routine 
-void readEncoder() {
+void readEncoder2() {
   int b2 = digitalRead(ENCD);
   if (b2 > 0) {
     posi2++;
