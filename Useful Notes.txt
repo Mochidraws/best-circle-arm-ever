@@ -2,3 +2,8 @@
 
 - Be careful of float mathematics, make sure its not rounding strangely
 
+- Writing interrupts on falling edge may increase resolution if needed
+
+- Plot a number of x/y points for the shape. Use inverse kinematics model function to convert these points to angles with which to control the motor.
+
+- code in last weeks blackboard which lets you increase the limimts of the serial plotter graph.
