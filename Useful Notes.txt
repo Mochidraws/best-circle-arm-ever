@@ -1,1 +1,4 @@
-- we are using an incremental encoder, so should zero and calibrate position first if want repeatability?
+- we are using an incremental encoder, so should zero and calibrate position first if want repeatability? Must have mechanical reference.
+
+- Be careful of float mathematics, make sure its not rounding strangely
+
