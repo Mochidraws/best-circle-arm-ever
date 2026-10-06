@@ -83,12 +83,12 @@ void setup2() {
   pinMode(PWM_pin2, OUTPUT);
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
-  time_start = millis();
+  time_start = millis2();
 }
 
-// Motor 1 Proportional Control Loop
+// Motor Proportional Control Loop
 void loop() {
-
+  // Motor 1 seciton
   // Set a reference angle position for the motor. It will be in counts, so conversion is needed to degrees for output.
   // Will change by +/-360 degrees every time_per_rotation milliseconds
   if ((millis() - time_start) > time_per_rotation) {
@@ -119,38 +119,12 @@ void loop() {
   if (u_amplitude > u_max_amplitude) {
     u_amplitude = u_max_amplitude;
   } 
- 
-  // call setMotor function to drive the motor at a set direction and torque
-  setMotor(u_sign, u_amplitude, PWM_pin, IN1, IN2);
-
-  // print target and position to see the response every print_interval times around the loop
-  interval_count = interval_count + 1;
-  if (interval_count >= print_interval) {
-    interval_count = 0;
-    Serial.print(millis());
-    Serial.print(" ");
-    Serial.print(ref);
-    Serial.print(" ");
-    Serial.print(pos);
-    Serial.print(" ");
-    Serial.print(e);
-    Serial.print(" ");
-    Serial.print(u_sign * u_amplitude);
-    Serial.print(" ");
-    Serial.print(0);
-    Serial.print(" ");
-    Serial.println();
-  }
-}
-
-// Motor 2 Proportional Control Loop
-void loop2() {
-
-  // Set a reference angle position for the motor. It will be in counts, so conversion is needed to degrees for output.
+ //Motor 2 section
+ // Set a reference angle position for the motor. It will be in counts, so conversion is needed to degrees for output.
   // Will change by +/-360 degrees every time_per_rotation milliseconds
-  if ((millis() - time_start2) > time_per_rotation2) {
+  if ((millis2() - time_start2) > time_per_rotation2) {
     rotations2 = 1-rotations2;
-    time_start2 = millis();
+    time_start2 = millis2();
   }
 
   ref2 = ref_amplitude2 * rotations2;
@@ -176,15 +150,31 @@ void loop2() {
   if (u_amplitude2 > u_max_amplitude2) {
     u_amplitude2 = u_max_amplitude2;
   } 
-  
   // call setMotor function to drive the motor at a set direction and torque
+  setMotor(u_sign, u_amplitude, PWM_pin, IN1, IN2);
   setMotor2(u_sign2, u_amplitude2, PWM_pin2, IN3, IN4);
 
   // print target and position to see the response every print_interval times around the loop
-  interval_count2 = interval_count2 + 1;
+  interval_count = interval_count + 1;
+  if (interval_count >= print_interval) {
+    interval_count = 0;
+    Serial.print(millis());
+    Serial.print(" ");
+    Serial.print(ref);
+    Serial.print(" ");
+    Serial.print(pos);
+    Serial.print(" ");
+    Serial.print(e);
+    Serial.print(" ");
+    Serial.print(u_sign * u_amplitude);
+    Serial.print(" ");
+    Serial.print(0);
+    Serial.print(" ");
+    Serial.println();
+    interval_count2 = interval_count2 + 1;
   if (interval_count2 >= print_interval2) {
     interval_count2 = 0;
-    Serial.print(millis());
+    Serial.print(millis2());
     Serial.print(" ");
     Serial.print(ref2);
     Serial.print(" ");
