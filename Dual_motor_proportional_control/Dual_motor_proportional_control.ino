@@ -57,35 +57,29 @@ float time_per_rotation2 = 2500;  // time allowed per rotation, in milliseconds
 unsigned long last_print2 = 0;
 const unsigned long print_interval_ms2 = 100;
 
-
-//Motor 1 initialization code
+// Motor Setup Codes3w
 void setup() {
-  Serial.begin(230400);  // set baud rate for communication between USB & raspberry pi pico
+  Serial.begin(230400);
+
+  // Motor 1
   pinMode(ENCA, INPUT);
   pinMode(ENCB, INPUT);
   attachInterrupt(digitalPinToInterrupt(ENCA), readEncoder, RISING);
-
-  // pwm and direction pins are outputs that go to the motor
   pinMode(PWM_pin, OUTPUT);
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
-  time_start = millis();
-}
 
-//Motor 2 initialization
-void setup2() {
-  Serial.begin(230400);  // set baud rate for communication between USB & raspberry pi pico
+  // Motor 2
   pinMode(ENCC, INPUT);
   pinMode(ENCD, INPUT);
   attachInterrupt(digitalPinToInterrupt(ENCC), readEncoder2, RISING);
-
-  // pwm and direction pins are outputs that go to the motor
   pinMode(PWM_pin2, OUTPUT);
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
-  time_start = millis2();
-}
 
+  time_start = millis();
+  time_start2 = millis();   // this was missing
+}
 // Motor Proportional Control Loop
 void loop() {
   // Motor 1 seciton
@@ -122,9 +116,9 @@ void loop() {
  //Motor 2 section
  // Set a reference angle position for the motor. It will be in counts, so conversion is needed to degrees for output.
   // Will change by +/-360 degrees every time_per_rotation milliseconds
-  if ((millis2() - time_start2) > time_per_rotation2) {
+  if ((millis() - time_start2) > time_per_rotation2) {
     rotations2 = 1-rotations2;
-    time_start2 = millis2();
+    time_start2 = millis();
   }
 
   ref2 = ref_amplitude2 * rotations2;
@@ -152,7 +146,7 @@ void loop() {
   } 
   // call setMotor function to drive the motor at a set direction and torque
   setMotor(u_sign, u_amplitude, PWM_pin, IN1, IN2);
-  setMotor2(u_sign2, u_amplitude2, PWM_pin2, IN3, IN4);
+  setMotor(u_sign2, u_amplitude2, PWM_pin2, IN3, IN4);
 
   // print target and position to see the response every print_interval times around the loop
   interval_count = interval_count + 1;
@@ -169,12 +163,6 @@ void loop() {
     Serial.print(u_sign * u_amplitude);
     Serial.print(" ");
     Serial.print(0);
-    Serial.print(" ");
-    Serial.println();
-    interval_count2 = interval_count2 + 1;
-  if (interval_count2 >= print_interval2) {
-    interval_count2 = 0;
-    Serial.print(millis2());
     Serial.print(" ");
     Serial.print(ref2);
     Serial.print(" ");
@@ -205,24 +193,6 @@ void setMotor(int dir, float pwmVal, int pwm_pin, int in1, int in2) {
   } else {
     digitalWrite(in1, LOW);
     digitalWrite(in2, LOW);
-  }
-}
-
-// Motor 2 function to send signal to motor driver (could also be defined at top of code)
-// set inputs and their classifications
-void setMotor2(int dir2, float pwmVal2, int pwm_pin2, int in3, int in4) {
-  //set the pwm pin to the appropriate level (0 - 255)
-  analogWrite(pwm_pin2, pwmVal2);
-  //set direction
-  if (dir2 == 1) {
-    digitalWrite(in3, HIGH);
-    digitalWrite(in4, LOW);
-  } else if (dir2 == -1) {
-    digitalWrite(in3, LOW);
-    digitalWrite(in4, HIGH);
-  } else {
-    digitalWrite(in3, LOW);
-    digitalWrite(in4, LOW);
   }
 }
 
