@@ -28,7 +28,10 @@ long time_start = 0;
 const int NUM_POINTS = 11;
 const int setpoints[NUM_POINTS] = {0, 233, 467, 700, 933, 1167, 1400, 1633, 1867, 2100, 2400};
 int point_index = 0;            // which setpoint we're currently targeting
-float time_per_point = 2000;    // ms spent on each point
+const int tolerance = 30;              // counts: "close enough" window
+const unsigned long dwell_ms = 500;    // must stay in window this long
+bool at_target = false;
+unsigned long time_arrived = 0;
 
 // ---------- Motor 2 variables (independent of motor 1) ----------
 volatile int posi_2 = 0;
@@ -46,7 +49,10 @@ float time_per_rotation_2 = 2500;  // can differ from motor 1
 const int NUM_POINTS_2 = 11;
 const int setpoints_2[NUM_POINTS_2] = {0, 233, 467, 700, 933, 1167, 1400, 1633, 1867, 2100, 2400};
 int point_index_2 = 0;            // which setpoint we're currently targeting
-float time_per_point_2 = 3000;    // ms spent on each point
+const int tolerance_2 = 30;              // counts: "close enough" window
+const unsigned long dwell_ms_2 = 500;    // must stay in window this long
+bool at_target_2 = false;
+unsigned long time_arrived_2 = 0;
 
 // ---------- Shared ----------
 int print_interval = 4000;  // how often values are sent to the serial monitor
@@ -84,10 +90,17 @@ void loop() {
   // ===================== MOTOR 1 =====================
   // Reference changes by set amount every time_per_point milliseconds
 
-  if ((millis() - time_start) > time_per_point) {
-  point_index = (point_index + 1) % NUM_POINTS;   // wraps 9 -> 0
-  time_start = millis();
+if (abs(e) <= tolerance) {
+  if (!at_target) {              // just entered the window
+    at_target = true;
+    time_arrived = millis();
+  } else if (millis() - time_arrived >= dwell_ms) {
+    point_index = (point_index + 1) % NUM_POINTS;
+    at_target = false;           // reset for the next point
   }
+} else {
+  at_target = false;             // left the window, restart the dwell timer
+}
   ref = setpoints[point_index];
 
   ATOMIC() {
@@ -109,10 +122,17 @@ void loop() {
   setMotor(u_sign, u_amplitude, PWM_pin, IN1, IN2);
 
   // ===================== MOTOR 2 =====================
-  if ((millis() - time_start_2) > time_per_point_2) {
-  point_index_2 = (point_index_2 + 1) % NUM_POINTS_2;   // wraps 9 -> 0
-  time_start_2 = millis();
+if (abs(e_2) <= tolerance_2) {
+  if (!at_target_2) {              // just entered the window
+    at_target_2 = true;
+    time_arrived_2 = millis();
+  } else if (millis() - time_arrived_2 >= dwell_ms_2) {
+    point_index_2 = (point_index_2 + 1) % NUM_POINTS_2;
+    at_target_2 = false;           // reset for the next point
   }
+} else {
+  at_target_2 = false;             // left the window, restart the dwell timer
+}
   ref_2 = setpoints_2[point_index_2];
 
   ATOMIC() {
@@ -150,6 +170,9 @@ void loop() {
     Serial.print(" ");
     Serial.print(time_start);
     Serial.print(" ");
+    Serial.print(at_target);
+    Serial.print(" ");
+    Serial.print(" ");
     Serial.print(ref_2);
     Serial.print(" ");
     Serial.print(pos_2);
@@ -157,7 +180,10 @@ void loop() {
     Serial.print(e_2);
     Serial.print(" ");
     Serial.print(u_sign_2 * u_amplitude_2);
+    Serial.print(" ");
     Serial.print(time_start_2);
+    Serial.print(" ");
+    Serial.print(at_target_2);
     Serial.print(" ");
     Serial.println();
   }
