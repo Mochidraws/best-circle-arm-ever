@@ -25,15 +25,38 @@ float u_f = 0;             // float version of u
 int u_max_amplitude = 150; // control signal amplitude (must be < 256)
 int u_sign = 0;            // required sign of control signal
 long time_start = 0;
-const int NUM_POINTS = 11;
-const int setpoints[NUM_POINTS] = {0, 233, 467, 700, 933, 1167, 1400, 1633, 1867, 2100, 2400};
+const int NUM_POINTS = 1000;
+const int setpoints[NUM_POINTS] = {
+    0, 21, 42, 63, 85, 106, 127, 148, 169, 190,
+    211, 233, 254, 275, 296, 317, 338, 359, 381, 402,
+    423, 444, 465, 486, 507, 529, 550, 571, 592, 613,
+    634, 655, 677, 698, 719, 740, 761, 782, 803, 825,
+    846, 867, 888, 909, 930, 951, 973, 994, 1015, 1036,
+    1057, 1078, 1099, 1121, 1142, 1163, 1184, 1205, 1226, 1247,
+    1269, 1290, 1311, 1332, 1353, 1374, 1395, 1417, 1438, 1459,
+    1480, 1501, 1522, 1543, 1565, 1586, 1607, 1628, 1649, 1670,
+    1691, 1713, 1734, 1755, 1776, 1797, 1818, 1839, 1861, 1882,
+    1903, 1924, 1945, 1966, 1987, 2009, 2030, 2051, 2072, 2096,
+    2096, 2072, 2051, 2030, 2009, 1987, 1966, 1945, 1924, 1903,
+    1882, 1861, 1839, 1818, 1797, 1776, 1755, 1734, 1713, 1691,
+    1670, 1649, 1628, 1607, 1586, 1565, 1543, 1522, 1501, 1480,
+    1459, 1438, 1417, 1395, 1374, 1353, 1332, 1311, 1290, 1269,
+    1247, 1226, 1205, 1184, 1163, 1142, 1121, 1099, 1078, 1057,
+    1036, 1015, 994, 973, 951, 930, 909, 888, 867, 846,
+    825, 803, 782, 761, 740, 719, 698, 677, 655, 634,
+    613, 592, 571, 550, 529, 507, 486, 465, 444, 423,
+    402, 381, 359, 338, 317, 296, 275, 254, 233, 211,
+    190, 169, 148, 127, 106, 85, 63, 42, 21, 0
+};
 int point_index = 0;            // which setpoint we're currently targeting
-float time_per_point = 2000;    // ms spent on each point
+float time_per_point = 150;    // ms spent on each point
+int e_sum = 0; //Integral sum
+int ki = 0.4; //Integral control gain
 
 // ---------- Motor 2 variables (independent of motor 1) ----------
 volatile int posi_2 = 0;
 float ref_2 = 0;
-float kp_2 = 0.9;
+float kp_2 = 1;
 int pos_2 = 0;
 int e_2 = 0;
 int u_amplitude_2 = 0;
@@ -41,15 +64,36 @@ float u_f_2 = 0;
 int u_max_amplitude_2 = 150;
 int u_sign_2 = 0;
 long time_start_2 = 0;
-int rotations_2 = 0;
-float time_per_rotation_2 = 2500;  // can differ from motor 1
-const int NUM_POINTS_2 = 11;
-const int setpoints_2[NUM_POINTS_2] = {0, 233, 467, 700, 933, 1167, 1400, 1633, 1867, 2100, 2400};
+const int NUM_POINTS_2 = 200;
+const int setpoints_2[NUM_POINTS] = {
+    0, 21, 42, 63, 85, 106, 127, 148, 169, 190,
+    211, 233, 254, 275, 296, 317, 338, 359, 381, 402,
+    423, 444, 465, 486, 507, 529, 550, 571, 592, 613,
+    634, 655, 677, 698, 719, 740, 761, 782, 803, 825,
+    846, 867, 888, 909, 930, 951, 973, 994, 1015, 1036,
+    1057, 1078, 1099, 1121, 1142, 1163, 1184, 1205, 1226, 1247,
+    1269, 1290, 1311, 1332, 1353, 1374, 1395, 1417, 1438, 1459,
+    1480, 1501, 1522, 1543, 1565, 1586, 1607, 1628, 1649, 1670,
+    1691, 1713, 1734, 1755, 1776, 1797, 1818, 1839, 1861, 1882,
+    1903, 1924, 1945, 1966, 1987, 2009, 2030, 2051, 2072, 2096,
+    2096, 2072, 2051, 2030, 2009, 1987, 1966, 1945, 1924, 1903,
+    1882, 1861, 1839, 1818, 1797, 1776, 1755, 1734, 1713, 1691,
+    1670, 1649, 1628, 1607, 1586, 1565, 1543, 1522, 1501, 1480,
+    1459, 1438, 1417, 1395, 1374, 1353, 1332, 1311, 1290, 1269,
+    1247, 1226, 1205, 1184, 1163, 1142, 1121, 1099, 1078, 1057,
+    1036, 1015, 994, 973, 951, 930, 909, 888, 867, 846,
+    825, 803, 782, 761, 740, 719, 698, 677, 655, 634,
+    613, 592, 571, 550, 529, 507, 486, 465, 444, 423,
+    402, 381, 359, 338, 317, 296, 275, 254, 233, 211,
+    190, 169, 148, 127, 106, 85, 63, 42, 21, 0
+};
 int point_index_2 = 0;            // which setpoint we're currently targeting
-float time_per_point_2 = 3000;    // ms spent on each point
+float time_per_point_2 = 150;    // ms spent on each point
+int e_sum_2 = 0; //Integral sum
+int ki_2 = 1; //Integral control gain
 
 // ---------- Shared ----------
-int print_interval = 4000;  // how often values are sent to the serial monitor
+int print_interval = time_per_point;  // how often values are sent to the serial monitor
 int interval_count = 0;
 float counts_per_rotation = 131.25 * 16;
 float ref_amplitude = counts_per_rotation;      // motor 1 target amplitude
@@ -95,12 +139,13 @@ void loop() {
   }
 
   e = ref - pos;
+  e_sum = e_sum + e; // Integral error sum
 
   u_sign = 0;
   if (e < 0) u_sign = -1;
   if (e > 0) u_sign = 1;
 
-  u_f = abs(1.0 * kp * e);
+  u_f = abs(1.0 * kp * e + ki * e_sum);
   u_amplitude = u_f;
   if (u_amplitude > u_max_amplitude) {
     u_amplitude = u_max_amplitude;
@@ -120,6 +165,7 @@ void loop() {
   }
 
   e_2 = ref_2 - pos_2;
+  e_sum_2 = e_sum_2 + e_2; // Integral error sum
 
   u_sign_2 = 0;
   if (e_2 < 0) u_sign_2 = -1;
@@ -146,6 +192,8 @@ void loop() {
     Serial.print(" ");
     Serial.print(e);
     Serial.print(" ");
+    Serial.print(e_sum);
+    Serial.print(" ");
     Serial.print(u_sign * u_amplitude);
     Serial.print(" ");
     Serial.print(time_start);
@@ -156,7 +204,10 @@ void loop() {
     Serial.print(" ");
     Serial.print(e_2);
     Serial.print(" ");
+    Serial.print(e_sum_2);
+    Serial.print(" ");
     Serial.print(u_sign_2 * u_amplitude_2);
+    Serial.print(" ");
     Serial.print(time_start_2);
     Serial.print(" ");
     Serial.println();
