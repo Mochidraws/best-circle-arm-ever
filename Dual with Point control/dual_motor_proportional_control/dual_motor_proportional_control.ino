@@ -1,0 +1,318 @@
+#include <SimplyAtomic.h>  // For the position read, to avoid missed counts
+
+// --- Util Pins ---
+#define BUTTON_PIN 5 // on-off button
+
+// ---------- Motor 1 pins ----------
+#define ENCA 0     // interrupt pin encoder A
+#define ENCB 1     // interrupt pin encoder B
+#define PWM_pin 2  // pin to send pwm value to motor driver
+#define IN1 3      // motor driver direction pins
+#define IN2 4
+
+// ---------- Motor 2 pins (change these to match your wiring) ----------
+#define ENCA_2 11
+#define ENCB_2 12
+#define PWM_pin_2 13
+#define IN3 14
+#define IN4 15
+
+// ---------- Motor 1 variables ----------
+volatile int posi = 0;     // volatile, integer because counts are discrete
+float ref = 0;
+float kp = 3;            // proportional gain
+int pos = 0;               // output position from the gearbox, in pulses
+int e = 0;                 // error between ref and pos
+int u_amplitude = 0;       // amplitude of the control signal
+float u_f = 0;             // float version of u
+int u_max_amplitude = 150; // control signal amplitude (must be < 256)
+int u_sign = 0;            // required sign of control signal
+long time_start = 0;
+const int NUM_POINTS = 1000;
+const int setpoints[NUM_POINTS] = {36,35,33,31,30,28,27,25,23,22,20,19,17,16,14,13,12,10,9,7,6,5,3,2,1,-1,-2,-3,-5,-6,-7,-8,-10,-11,-12,-13,-14,-16,-17,-18,-19,-20,-21,-22,-23,-24,-26,-27,-28,-29,-30,-31,-32,-33,-34,-35,-36,-37,-37,-38,-39,-40,-41,-42,-43,-44,-45,-45,-46,-47,-48,-49,-50,-50,-51,-52,-53,-54,-54,-55,-56,-56,-57,-58,-59,-59,-60,-61,-61,-62,-63,-63,-64,-65,-65,-66,-66,-67,-68,-68,-69,-69,-70,-70,-71,-72,-72,-73,-73,-74,-74,-75,-75,-76,-76,-77,-77,-77,-78,-78,-79,-79,-80,-80,-80,-81,-81,-82,-82,-82,-83,-83,-84,-84,-84,-85,-85,-85,-86,-86,-86,-87,-87,-87,-87,-88,-88,-88,-89,-89,-89,-89,-90,-90,-90,-90,-91,-91,-91,-91,-92,-92,-92,-92,-92,-92,-93,-93,-93,-93,-93,-94,-94,-94,-94,-94,-94,-94,-94,-95,-95,-95,-95,-95,-95,-95,-95,-95,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-96,-95,-95,-95,-95,-95,-95,-95,-95,-95,-95,-94,-94,-94,-94,-94,-94,-94,-94,-93,-93,-93,-93,-93,-92,-91,-90,-89,-88,-87,-86,-85,-85,-84,-83,-82,-81,-80,-79,-78,-77,-76,-75,-74,-74,-73,-72,-71,-70,-69,-68,-67,-66,-65,-64,-64,-63,-62,-61,-60,-59,-58,-57,-56,-55,-54,-53,-53,-52,-51,-50,-49,-48,-47,-46,-45,-44,-43,-42,-42,-41,-40,-39,-38,-37,-36,-35,-34,-33,-32,-31,-31,-30,-29,-28,-27,-26,-25,-24,-23,-22,-21,-20,-20,-19,-18,-17,-16,-15,-14,-13,-12,-11,-10,-9,-8,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,4,5,6,7,8,9,10,11,12,13,14,15,16,17,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,121,122,123,124,125,126,127,128,129,130,131,133,134,135,136,137,138,139,140,142,143,144,145,146,147,149,148,148,148,147,147,147,147,146,146,146,146,145,145,145,145,144,144,144,144,144,143,143,143,143,143,143,142,142,142,142,142,142,142,141,141,141,141,141,141,141,141,141,141,141,141,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,141,141,141,141,141,141,141,141,141,141,141,141,142,142,142,142,142,142,142,142,142,143,143,143,143,143,143,144,144,144,144,144,144,145,145,145,145,145,145,146,146,146,146,147,147,147,147,147,148,148,148,148,149,149,149,149,150,150,150,150,151,151,151,151,152,152,152,153,153,153,154,154,154,154,155,155,155,156,156,156,157,157,157,158,158,158,159,159,159,160,160,161,161,161,162,162,162,163,163,164,164,164,165,165,166,166,166,167,167,168,168,169,169,169,170,170,171,171,172,172,173,173,173,174,174,175,175,176,176,177,177,178,178,179,179,180,180,181,181,182,182,183,183,184,184,185,185,186,186,187,187,188,189,189,190,190,191,191,192,192,193,194,194,195,195,196,196,197,198,198,199,199,200,201,201,202,202,202,201,200,200,199,198,197,197,196,195,195,194,193,193,192,191,191,190,189,188,188,187,186,186,185,184,184,183,182,182,181,180,180,179,178,178,177,176,176,175,174,174,173,172,172,171,170,170,169,168,168,167,166,166,165,164,164,163,162,162,161,160,160,159,158,158,157,157,156,155,155,154,153,153,152,151,151,150,149,149,148,147,147,146,145,145,144,144,143,142,142,141,140,140,139,138,138,137,136,136,135,135,134,133,133,132,131,131,130,129,129,128,128,127,126,126,125,124,124,123,122,122,121,121,120,119,119,118,117,117,116,115,115,114,113,113,112,112,111,110,110,109,108,108,107,106,106,105,105,104,103,103,102,101,101,100,99,99,98,97,97,96,96,95,94,94,93,92,92,91,90,90,89,88,88,87,86,86,85,85,84,83,83,82,81,81,80,79,79,78,77,77,76,75,75,74,73,73,72,71,71,70,69,69,68,67,67,66,65,65,64,63,63,62,61,60,60,59,58,58,57,56,56,55,54,54,53,52,51,51,50,49,49,48,47,46,46,45,44,44,43,42,41,41,40,39,38,38,37
+};
+int point_index = 0;            // which setpoint we're currently targeting
+float time_per_point = 5;    // ms spent on each point
+float e_sum = 0; //Integral sum
+float ki = 3; //Integral control gain
+const float i_max = 30;
+float kd = 0.12;     // start small, tune up
+int e_prev = 0;
+float d_term = 0;    // filtered de/dt (counts/s)
+
+// ---------- Motor 2 variables (independent of motor 1) ----------
+volatile int posi_2 = 0;
+float ref_2 = 0;
+float kp_2 = 3;
+int pos_2 = 0;
+int e_2 = 0;
+int u_amplitude_2 = 0;
+float u_f_2 = 0;
+int u_max_amplitude_2 = 150;
+int u_sign_2 = 0;
+long time_start_2 = 0;
+const int NUM_POINTS_2 = 1000;
+const int setpoints_2[NUM_POINTS] = {870,869,868,867,866,865,864,862,861,860,859,858,857,856,855,854,853,852,851,850,849,848,846,845,844,843,842,841,840,839,838,837,836,834,833,832,831,830,829,828,827,826,824,823,822,821,820,819,818,817,816,814,813,812,811,810,809,808,806,805,804,803,802,801,800,798,797,796,795,794,793,792,790,789,788,787,786,785,783,782,781,780,779,778,776,775,774,773,772,771,769,768,767,766,765,763,762,761,760,759,758,756,755,754,753,752,750,749,748,747,746,744,743,742,741,739,738,737,736,735,733,732,731,730,728,727,726,725,724,722,721,720,719,717,716,715,714,712,711,710,709,707,706,705,704,702,701,700,699,697,696,695,693,692,691,690,688,687,686,685,683,682,681,679,678,677,675,674,673,672,670,669,668,666,665,664,662,661,660,658,657,656,654,653,652,650,649,648,646,645,644,642,641,640,638,637,636,634,633,632,630,629,628,626,625,623,622,621,619,618,617,615,614,612,611,610,608,607,605,604,603,601,600,598,597,595,594,593,591,590,588,587,585,584,583,581,580,578,577,575,574,572,571,569,568,566,565,563,562,560,559,558,558,557,557,556,556,555,555,554,553,553,552,552,551,551,550,549,549,548,548,547,546,546,545,544,544,543,543,542,541,541,540,539,539,538,537,537,536,535,535,534,533,533,532,531,530,530,529,528,528,527,526,525,525,524,523,522,522,521,520,519,519,518,517,516,516,515,514,513,512,512,511,510,509,508,508,507,506,505,504,503,503,502,501,500,499,498,497,497,496,495,494,493,492,491,490,489,488,488,487,486,485,484,483,482,481,480,479,478,477,476,475,474,473,472,471,470,469,468,467,466,465,464,463,462,461,460,459,458,457,456,455,454,453,452,451,450,449,448,446,445,444,443,442,441,440,439,438,436,435,434,433,432,431,429,428,427,426,425,424,422,421,420,419,418,416,415,414,413,411,410,409,408,406,405,404,402,401,400,399,397,396,395,393,392,391,389,388,386,385,384,382,381,380,378,377,375,374,372,371,370,368,367,365,364,362,361,359,358,356,355,353,352,350,348,347,345,344,342,341,339,337,336,334,332,331,329,327,326,324,322,321,319,317,315,313,312,310,308,306,304,303,301,299,297,295,293,291,289,287,289,291,293,295,297,299,301,303,304,306,308,310,312,313,315,317,319,321,322,324,326,327,329,331,332,334,336,337,339,341,342,344,345,347,348,350,352,353,355,356,358,359,361,362,364,365,367,368,370,371,372,374,375,377,378,380,381,382,384,385,386,388,389,391,392,393,395,396,397,399,400,401,402,404,405,406,408,409,410,411,413,414,415,416,418,419,420,421,422,424,425,426,427,428,429,431,432,433,434,435,436,438,439,440,441,442,443,444,445,446,448,449,450,451,452,453,454,455,456,457,458,459,460,461,462,463,464,465,466,467,468,469,470,471,472,473,474,475,476,477,478,479,480,481,482,483,484,485,486,487,488,488,489,490,491,492,493,494,495,496,497,497,498,499,500,501,502,503,503,504,505,506,507,508,508,509,510,511,512,512,513,514,515,516,516,517,518,519,519,520,521,522,522,523,524,525,525,526,527,528,528,529,530,530,531,532,533,533,534,535,535,536,537,537,538,539,539,540,541,541,542,543,543,544,544,545,546,546,547,548,548,549,549,550,551,551,552,552,553,553,554,555,555,556,556,557,557,558,558,559,560,562,563,565,566,568,569,571,572,574,575,577,578,580,581,583,584,585,587,588,590,591,593,594,595,597,598,600,601,603,604,605,607,608,610,611,612,614,615,617,618,619,621,622,623,625,626,628,629,630,632,633,634,636,637,638,640,641,642,644,645,646,648,649,650,652,653,654,656,657,658,660,661,662,664,665,666,668,669,670,672,673,674,675,677,678,679,681,682,683,685,686,687,688,690,691,692,693,695,696,697,699,700,701,702,704,705,706,707,709,710,711,712,714,715,716,717,719,720,721,722,724,725,726,727,728,730,731,732,733,735,736,737,738,739,741,742,743,744,746,747,748,749,750,752,753,754,755,756,758,759,760,761,762,763,765,766,767,768,769,771,772,773,774,775,776,778,779,780,781,782,783,785,786,787,788,789,790,792,793,794,795,796,797,798,800,801,802,803,804,805,806,808,809,810,811,812,813,814,816,817,818,819,820,821,822,823,824,826,827,828,829,830,831,832,833,834,836,837,838,839,840,841,842,843,844,845,846,848,849,850,851,852,853,854,855,856,857,858,859,860,861,862,864,865,866,867,868,869
+};
+int point_index_2 = 0;            // which setpoint we're currently targeting
+float time_per_point_2 = 5;    // ms spent on each point
+float e_sum_2 = 0; //Integral sum
+float ki_2 = 3; //Integral control gain
+const float i_max_2 = 30;
+float kd_2 = 0.12;
+int e_prev_2 = 0;
+float d_term_2 = 0;
+
+// ---------- Shared ----------
+int print_interval = 1000;  // how often values are sent to the serial monitor
+int interval_count = 0;
+float counts_per_rotation = 131.25 * 16;
+float ref_amplitude = counts_per_rotation;      // motor 1 target amplitude
+float ref_amplitude_2 = counts_per_rotation;    // motor 2 target amplitude
+
+const unsigned long Ts_us = 2000;  // derivative sample period (2 ms)
+const float d_alpha = 0.2;         // filter: smaller = smoother, laggier
+unsigned long t_prev_us = 0;
+
+bool running = false; // starts paused
+const unsigned long debounce_ms = 30;
+
+void setup() {
+  Serial.begin(230400);  // baud rate for communication between USB & raspberry pi pico
+
+  // button
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+
+  // Motor 1
+  pinMode(ENCA, INPUT);
+  pinMode(ENCB, INPUT);
+  attachInterrupt(digitalPinToInterrupt(ENCA), readEncoder, RISING);
+  pinMode(PWM_pin, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+
+  // Motor 2
+  pinMode(ENCA_2, INPUT);
+  pinMode(ENCB_2, INPUT);
+  attachInterrupt(digitalPinToInterrupt(ENCA_2), readEncoder2, RISING);
+  pinMode(PWM_pin_2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+
+  time_start = millis();
+  time_start_2 = millis();
+}
+
+// This loop implements proportional control for both motors
+void loop() {
+
+  // ===================== START / PAUSE BUTTON =====================
+  if (buttonPressed()) {
+    running = !running;
+
+    if (running) {
+      // Fresh start/resume: restart timers and clear controller memory
+      time_start   = millis();
+      time_start_2 = millis();
+      t_prev_us    = micros();
+
+      e_sum = 0;    e_sum_2 = 0;
+      d_term = 0;   d_term_2 = 0;
+
+      ATOMIC() { pos = posi; pos_2 = posi_2; }
+      e_prev   = setpoints[point_index]     - pos;
+      e_prev_2 = setpoints_2[point_index_2] - pos_2;
+    }
+    Serial.println(running ? "RUNNING" : "PAUSED");
+  }
+
+  if (!running) {
+    setMotor(0, 0, PWM_pin,   IN1, IN2);   // motors off
+    setMotor(0, 0, PWM_pin_2, IN3, IN4);
+    return;                                // skip control and printing
+  }
+
+  // ===================== MOTOR 1 =====================
+  // Reference changes by set amount every time_per_point milliseconds
+
+  bool d_update = false;
+float dt = 0;
+unsigned long now_us = micros();
+if (now_us - t_prev_us >= Ts_us) {
+  dt = (now_us - t_prev_us) / 1e6;
+  t_prev_us = now_us;
+  d_update = true;
+}
+
+  if ((millis() - time_start) > time_per_point) {
+  point_index = (point_index + 1) % NUM_POINTS;   // wraps 9 -> 0
+  time_start = millis();
+  }
+  ref = setpoints[point_index];
+
+  ATOMIC() {
+    pos = posi;
+  }
+
+  e = ref - pos;
+
+if (d_update) {
+  float d_raw = (e - e_prev) / dt;
+  d_term = d_alpha * d_raw + (1 - d_alpha) * d_term;
+  e_prev = e;
+
+  e_sum += e * dt;
+ if (ki > 0) e_sum = constrain(e_sum, -i_max / ki, i_max / ki);
+}
+
+  u_f = (kp * e + ki * e_sum + kd * d_term);
+
+  u_sign = 0;
+  if (u_f < 0) u_sign = -1;
+  if (u_f > 0) u_sign = 1;
+
+  u_amplitude = abs(u_f);
+  if (u_amplitude > u_max_amplitude) {
+    u_amplitude = u_max_amplitude;
+  }
+
+  setMotor(u_sign, u_amplitude, PWM_pin, IN1, IN2);
+
+  // ===================== MOTOR 2 =====================
+  if ((millis() - time_start_2) > time_per_point_2) {
+  point_index_2 = (point_index_2 + 1) % NUM_POINTS_2;   // wraps 9 -> 0
+  time_start_2 = millis();
+  }
+  ref_2 = setpoints_2[point_index_2];
+
+  ATOMIC() {
+    pos_2 = posi_2;
+  }
+
+  e_2 = ref_2 - pos_2;
+
+if (d_update) {
+  float d_raw_2 = (e_2 - e_prev_2) / dt;
+  d_term_2 = d_alpha * d_raw_2 + (1 - d_alpha) * d_term_2;
+  e_prev_2 = e_2;
+
+  e_sum_2 += e_2 * dt;
+ if (ki_2 > 0) e_sum_2 = constrain(e_sum_2, -i_max_2 / ki_2, i_max_2 / ki_2);
+}
+
+  u_f_2 = (kp_2 * e_2 + ki_2 * e_sum_2 + kd_2 * d_term_2);
+
+  u_sign_2 = 0;
+  if (u_f_2 < 0) u_sign_2 = -1;
+  if (u_f_2 > 0) u_sign_2 = 1;
+
+  u_amplitude_2 = abs(u_f_2);
+  if (u_amplitude_2 > u_max_amplitude_2) {
+    u_amplitude_2 = u_max_amplitude_2;
+  }
+
+  setMotor(u_sign_2, u_amplitude_2, PWM_pin_2, IN3, IN4);
+
+  // ===================== PRINTING =====================
+  interval_count = interval_count + 1;
+  if (interval_count >= print_interval) {
+    interval_count = 0;
+
+    // PWM contribution of each term (before the saturation clamp)
+    float p_pwm   = kp * e;
+    float i_pwm   = ki * e_sum;
+    float d_pwm   = kd * d_term;
+    float p_pwm_2 = kp_2 * e_2;
+    float i_pwm_2 = ki_2 * e_sum_2;
+    float d_pwm_2 = kd_2 * d_term_2;
+
+    printField("t", (int)millis());
+
+    Serial.print("| M1 ");
+    printField("ref_1", ref);
+    printField("pos_1", pos);
+    printField("e_1", e);
+    printField("P_1", p_pwm);
+    printField("I_1", i_pwm);
+    printField("D_1", d_pwm);
+    printField("u_1", u_sign * u_amplitude);
+
+    Serial.print("| M2 ");
+    printField("ref_2", ref_2);
+    printField("pos_2", pos_2);
+    printField("e_2", e_2);
+    printField("P_2", p_pwm_2);
+    printField("I_2", i_pwm_2);
+    printField("D_2", d_pwm_2);
+    printField("u_2", u_sign_2 * u_amplitude_2);
+
+    Serial.println();
+  }
+}
+
+// Send signal to motor driver (shared by both motors)
+void setMotor(int dir, float pwmVal, int pwm_pin, int in1, int in2) {
+  analogWrite(pwm_pin, pwmVal);  // 0 - 255
+  if (dir == 1) {
+    digitalWrite(in1, HIGH);
+    digitalWrite(in2, LOW);
+  } else if (dir == -1) {
+    digitalWrite(in1, LOW);
+    digitalWrite(in2, HIGH);
+  } else {
+    digitalWrite(in1, LOW);
+    digitalWrite(in2, LOW);
+  }
+}
+
+bool buttonPressed() {
+  static bool stable = HIGH;              // last accepted state
+  static bool last_reading = HIGH;
+  static unsigned long last_change = 0;
+
+  bool reading = digitalRead(BUTTON_PIN);
+  if (reading != last_reading) {          // contact moved: restart the timer
+    last_change = millis();
+    last_reading = reading;
+  }
+  if ((millis() - last_change) > debounce_ms && reading != stable) {
+    stable = reading;
+    if (stable == LOW) return true;       // accepted press (pull-up: LOW = pressed)
+  }
+  return false;
+}
+
+// Interrupt service routine, motor 1
+void readEncoder() {
+  int b = digitalRead(ENCB);
+  if (b > 0) {
+    posi++;
+  } else {
+    posi--;
+  }
+}
+
+// Interrupt service routine, motor 2
+void readEncoder2() {
+  int b = digitalRead(ENCB_2);
+  if (b > 0) {
+    posi_2++;
+  } else {
+    posi_2--;
+  }
+}
+
+// Print "label=value " (int and float versions)
+void printField(const char* label, int value) {
+  Serial.print(label);
+  Serial.print("=");
+  Serial.print(value);
+  Serial.print(" ");
+}
+
+void printField(const char* label, float value) {
+  Serial.print(label);
+  Serial.print("=");
+  Serial.print(value);
+  Serial.print(" ");
+}
