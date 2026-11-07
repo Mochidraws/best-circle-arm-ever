@@ -1,4 +1,19 @@
 #include <SimplyAtomic.h>  // For the position read, to avoid missed counts
+#include <Servo.h>
+
+// ---------- Pen servo (continuous rotation, timed spool) ----------
+#define SERVO_PIN 6                       // GPIO 6: own PWM slice, away from the motor PWM pins
+
+const int PEN_DOWN_US = 700;              // full speed CW (swap with UP if the pen goes the wrong way)
+const int PEN_UP_US   = 2300;             // full speed CCW
+const unsigned long PEN_DOWN_MS = 300;    // measured spool time to lower the pen
+const unsigned long PEN_UP_MS   = 300;    // measured spool time to raise the pen
+
+volatile bool pen_down_cmd = false;       // SET BY MAIN LOOP: true = pen should be down
+bool pen_is_down = false;                 // where the pen loop thinks the pen is (starts up)
+bool pen_moving  = false;
+unsigned long pen_move_end = 0;
+Servo pen;
 
 // --- Util Pins ---
 #define BUTTON_PIN 5 // on-off button
@@ -88,6 +103,9 @@ const unsigned long debounce_ms = 30;
 void setup() {
   Serial.begin(230400);  // baud rate for communication between USB & raspberry pi pico
 
+  // Servo
+  penSetup();
+
   // button
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
@@ -113,6 +131,12 @@ void setup() {
 
 void loop() {
   
+  // ---- flags for the pen loop ----
+  if (state == ST_HOMED)     pen_down_cmd = true;    // homed: lower the pen
+  else if (state == ST_IDLE) pen_down_cmd = false;   // idle: lift the pen
+  // other states: leave the pen where it is
+  penLoop();
+
   printState();
 
   // ===================== BUTTON / STATE MACHINE =====================
@@ -201,6 +225,12 @@ void loop() {
 
   u_f = (kp * e + ki * e_sum + kd * d_term);
 
+  // Homing/homed: inside the tolerance band, stop driving and clear the integral
+  if (state == ST_HOMED && abs(e) <= HOME_TOLERANCE) {
+    u_f = 0;
+    e_sum = 0;
+  }
+
   u_sign = 0;
   if (u_f < 0) u_sign = -1;
   if (u_f > 0) u_sign = 1;
@@ -235,6 +265,11 @@ void loop() {
   }
 
   u_f_2 = (kp_2 * e_2 + ki_2 * e_sum_2 + kd_2 * d_term_2);
+
+  if (state == ST_HOMED && abs(e_2) <= HOME_TOLERANCE) {
+    u_f_2 = 0;
+    e_sum_2 = 0;
+  }
 
   u_sign_2 = 0;
   if (u_f_2 < 0) u_sign_2 = -1;
@@ -344,6 +379,35 @@ bool buttonPressed() {
   return false;
 }
 
+void penSetup() {
+  pinMode(SERVO_PIN, OUTPUT);
+  digitalWrite(SERVO_PIN, LOW);           // no pulses = servo idle and silent
+}
+
+// Pen loop: reads only pen_down_cmd. Call once per pass.
+void penLoop() {
+  if (pen_moving) {
+    // let the timed move finish, then stop sending pulses
+    if ((long)(millis() - pen_move_end) >= 0) {
+      pen.detach();
+      pinMode(SERVO_PIN, OUTPUT);
+      digitalWrite(SERVO_PIN, LOW);
+      pen_moving = false;
+    }
+    return;
+  }
+
+  // not moving: start a move if the pen isn't where it's been asked to be
+  bool want_down = pen_down_cmd;
+  if (want_down != pen_is_down) {
+    pen.attach(SERVO_PIN, 700, 2300);     // limits stop the library clamping the pulse
+    pen.writeMicroseconds(want_down ? PEN_DOWN_US : PEN_UP_US);
+    pen_move_end = millis() + (want_down ? PEN_DOWN_MS : PEN_UP_MS);
+    pen_is_down = want_down;              // taken as its position once the move completes
+    pen_moving = true;
+  }
+}
+
 // Interrupt service routine, motor 1
 void readEncoder() {
   int b = digitalRead(ENCB);
@@ -379,7 +443,7 @@ void printField(const char* label, float value) {
   Serial.print(" ");
 }
 
-// Prints the current state once a second, independent of the control loop
+// Prints the rig state and pen state once a second, independent of the control loop
 void printState() {
   static unsigned long last_print = 0;
   if (millis() - last_print < 1000) return;
@@ -387,10 +451,17 @@ void printState() {
 
   Serial.print("state=");
   switch (state) {
-    case ST_IDLE:    Serial.println("IDLE");    break;
-    case ST_HOMING:  Serial.println("HOMING");  break;
-    case ST_HOMED:   Serial.println("HOMED");   break;
-    case ST_RUNNING: Serial.println("RUNNING"); break;
-    case ST_PAUSED:  Serial.println("PAUSED");  break;
+    case ST_IDLE:    Serial.print("IDLE");    break;
+    case ST_HOMING:  Serial.print("HOMING");  break;
+    case ST_HOMED:   Serial.print("HOMED");   break;
+    case ST_RUNNING: Serial.print("RUNNING"); break;
+    case ST_PAUSED:  Serial.print("PAUSED");  break;
+  }
+
+  Serial.print(" pen=");
+  if (pen_moving) {
+    Serial.println(pen_is_down ? "LOWERING" : "RAISING");
+  } else {
+    Serial.println(pen_is_down ? "DOWN" : "UP");
   }
 }
