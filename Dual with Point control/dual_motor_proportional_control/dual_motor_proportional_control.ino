@@ -97,6 +97,9 @@ int shape = 0;  // Target shape of run
 // compile-time check that each shape's two motor arrays are the same length
 static_assert(sizeof(shape1_m1) == sizeof(shape1_m2), "shape 1: M1/M2 lengths differ");
 static_assert(sizeof(shape2_m1) == sizeof(shape2_m2), "shape 2: M1/M2 lengths differ");
+// point_index at which the pen drops, per shape.
+// 0 = lower as soon as homed, X = lower when past encoder point X
+const int pen_drop_index[] = { 100, 0, 0 };   // shape 1, 2 and 3
 
 
 // ---------- Homing / state machine ----------
@@ -144,9 +147,10 @@ void setup() { // Starts serial connection and initialises connected hardware
 void loop() {
   
   // ---- flags for pen control ----
-  if (state == ST_HOMED)     pen_down_cmd = true;    // on homed: lower the pen
-  else if (state == ST_IDLE) pen_down_cmd = false;   // on idle: lift the pen
-  penLoop(); // Run pen control with state flags
+  if (state == ST_HOMED)        pen_down_cmd = (pen_drop_index[shape] == 0);          // drop if no running start
+  else if (state == ST_RUNNING) pen_down_cmd = (point_index >= pen_drop_index[shape]); // drop once past the running start
+  else if (state == ST_IDLE)    pen_down_cmd = false;
+  penLoop();
   printState(); // Print state of main and pen loop every 1s
 
   // ===================== BUTTON / STATE MACHINE =====================

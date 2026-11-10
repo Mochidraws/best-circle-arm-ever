@@ -2,3 +2,20 @@
 
 - Be careful of float mathematics, make sure its not rounding strangely
 
+- Writing interrupts on falling edge may increase resolution if needed
+
+- Plot a number of x/y points for the shape. Use inverse kinematics model function to convert these points to angles with which to control the motor.
+
+- code in last weeks blackboard which lets you increase the limimts of the serial plotter graph.
+
+- to overcome stiction or stalling of motor can add integral term but is important to reduce effect of it when leaving stall region, or you get a destabilising effect. See week 3/4 notes pg 12 ish.
+
+- Encoder has 2096 counts per rotation not 2100.
+
+- Note on constant force between pen and paper, if motor is not perfectly perpendicular then force varies. can have a look into how to combat that.
+
+- Worth getting accurate backlash using alternative methods if possible. Can do using encoder must have solid thing to screw output shaft to. Current measurement about 1.88 degrees, with slight play in outer casing.
+
+- Motor casing has inherent backlash in the mounting plate, should combat this through design. Could clamp directly to gearbox/rotor assembly.
+
+- In report talk about maybe produce a graph of control error to show whether the control is good.
