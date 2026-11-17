@@ -92,7 +92,7 @@ const int* const shapes_m1[] = { shape1_m1, shape2_m1 };
 const int* const shapes_m2[] = { shape1_m2, shape2_m2 };
 const int shape_len[] = { sizeof(shape1_m1) / sizeof(int),
                           sizeof(shape2_m1) / sizeof(int) };
-const int NUM_SHAPES = 3; // Change depending on number of different shape arrays to draw
+const int NUM_SHAPES = 2; // Change depending on number of different shape arrays to draw
 int shape = 0;  // Target shape of run
 // compile-time check that each shape's two motor arrays are the same length
 static_assert(sizeof(shape1_m1) == sizeof(shape1_m2), "shape 1: M1/M2 lengths differ");
