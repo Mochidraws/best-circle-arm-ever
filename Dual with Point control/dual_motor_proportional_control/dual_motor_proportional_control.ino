@@ -52,7 +52,7 @@ float time_per_point = 5;    // ms to spend on each encoder point
 float e_sum = 0; // Integral sum
 float ki = 90; // Integral control gain
 const float i_max = 70; // Integral control signal limiter. Prevents extreme buildup and overshoot.
-float kd = 1;     // Derivative control gain
+float kd = 0;     // Derivative control gain
 int e_prev = 0;      // Arithmetic for Derivative error
 float d_term = 0;    // filtered de/dt (counts/s)
 
@@ -76,7 +76,7 @@ float time_per_point_2 = 5;    // ms spent on each point
 float e_sum_2 = 0; //Integral sum
 float ki_2 = 90; //Integral control gain
 const float i_max_2 = 70;
-float kd_2 = 1;
+float kd_2 = 0;
 int e_prev_2 = 0;
 float d_term_2 = 0;
 
@@ -112,6 +112,22 @@ const int HOME_TOLERANCE = 5;               // Tolerance in encoder counts for s
 const unsigned long HOME_SETTLE_MS = 7000;  // Settling time for how long motors must be within HOME_TOLERANCE
 unsigned long home_in_band_since = 0;
 const unsigned long debounce_ms = 30;       // Button press debounce prevents multiple inputs from one button press
+
+// ---------- Derivative Adapative Gain -----------
+const float KD_STRAIGHT = 0.3, KD_CORNER = 1.5;   // starting guesses
+const int LEAD = 12, LAG = 30;                    // points
+const int corners_s1[] = {250, 500, 750}; // Corner Points
+const int N_CORNERS_S1 = sizeof(corners_s1) / sizeof(int);
+
+float kdSchedule(int idx) {
+  float w = 0;
+  for (int k = 0; k < N_CORNERS_S1; k++) {
+    int d = idx - corners_s1[k];                  // negative = approaching
+    float x = (d < 0) ? -d / (float)LEAD : d / (float)LAG;
+    w = max(w, 1.0f - x);                         // triangular, clipped at 0
+  }
+  return KD_STRAIGHT + w * (KD_CORNER - KD_STRAIGHT);
+}
 
 void setup() { // Starts serial connection and initialises connected hardware
   Serial.begin(230400);  // baud rate for communication between USB & raspberry pi pico
@@ -152,6 +168,10 @@ void loop() {
   else if (state == ST_IDLE)    pen_down_cmd = false;
   penLoop();
   printState(); // Print state of main and pen loop every 1s
+
+  // ---- Adaptive Derivative Gain -------
+  kd = kdSchedule(point_index);
+  kd_2 = kdSchedule(point_index);
 
   // ===================== BUTTON / STATE MACHINE =====================
   if (buttonPressed()) {
@@ -237,6 +257,7 @@ void loop() {
 
     e_sum += e * dt;
     if (ki > 0) e_sum = constrain(e_sum, -i_max / ki, i_max / ki);
+    if (state == ST_RUNNING && (abs(kp * e + kd * d_term) < 90)) e_sum = 0;
   }
 
   u_f = (kp * e + ki * e_sum + kd * d_term); // calcs control signal amplitude from PID
@@ -280,6 +301,7 @@ void loop() {
 
     e_sum_2 += e_2 * dt;
     if (ki_2 > 0) e_sum_2 = constrain(e_sum_2, -i_max_2 / ki_2, i_max_2 / ki_2);
+    if (state == ST_RUNNING && (abs(kp_2 * e_2 + kd_2 * d_term_2) < 90)) e_sum_2 = 0;
   }
 
   u_f_2 = (kp_2 * e_2 + ki_2 * e_sum_2 + kd_2 * d_term_2);
