@@ -92,7 +92,7 @@ const int* const shapes_m1[] = { shape1_m1, shape2_m1 };
 const int* const shapes_m2[] = { shape1_m2, shape2_m2 };
 const int shape_len[] = { sizeof(shape1_m1) / sizeof(int),
                           sizeof(shape2_m1) / sizeof(int) };
-const int NUM_SHAPES = 1; // Change depending on number of different shape arrays to draw
+const int NUM_SHAPES = 3; // Change depending on number of different shape arrays to draw
 int shape = 0;  // Target shape of run
 // compile-time check that each shape's two motor arrays are the same length
 static_assert(sizeof(shape1_m1) == sizeof(shape1_m2), "shape 1: M1/M2 lengths differ");
@@ -114,15 +114,19 @@ unsigned long home_in_band_since = 0;
 const unsigned long debounce_ms = 30;       // Button press debounce prevents multiple inputs from one button press
 
 // ---------- Derivative Adapative Gain -----------
-const float KD_STRAIGHT = 0.3, KD_CORNER = 1.5;   // starting guesses
+const float KD_STRAIGHT = 0.3, KD_CORNER = 1.5, KD_CIRCLE = 1.0;   // starting guesses
 const int LEAD = 12, LAG = 30;                    // points
-const int corners_s1[] = {250, 500, 750}; // Corner Points
+const int corners_s1[] = {250, 500, 750, 1000}; // Corner Points shape 1 (square)
+const int corners_s2[] = {333, 666, 1000}; // Corner Points shape 2 (triangle)
+const int* const corners[] = { corners_s1, corners_s2 };
 const int N_CORNERS_S1 = sizeof(corners_s1) / sizeof(int);
+const int N_CORNERS_S2 = sizeof(corners_s2) / sizeof(int);
+const int N_CORNERS[] = { N_CORNERS_S1, N_CORNERS_S2 };
 
 float kdSchedule(int idx) {
   float w = 0;
-  for (int k = 0; k < N_CORNERS_S1; k++) {
-    int d = idx - corners_s1[k];                  // negative = approaching
+  for (int k = 0; k < N_CORNERS[shape]; k++) {
+    int d = idx - corners[shape][k];                  // negative = approaching
     float x = (d < 0) ? -d / (float)LEAD : d / (float)LAG;
     w = max(w, 1.0f - x);                         // triangular, clipped at 0
   }
@@ -170,8 +174,13 @@ void loop() {
   printState(); // Print state of main and pen loop every 1s
 
   // ---- Adaptive Derivative Gain -------
+  if (shape < 1) {
   kd = kdSchedule(point_index);
   kd_2 = kdSchedule(point_index);
+  } else {
+  kd = KD_CIRCLE;
+  kd_2 = KD_CIRCLE;
+  }
 
   // ===================== BUTTON / STATE MACHINE =====================
   if (buttonPressed()) {
