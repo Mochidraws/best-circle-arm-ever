@@ -57,6 +57,8 @@ const float i_max = 70; // Integral control signal limiter. Prevents extreme bui
 float kd = 0;     // Derivative control gain
 int e_prev = 0;      // Arithmetic for Derivative error
 float d_term = 0;    // filtered de/dt (counts/s)
+float kv = 0;
+int pos_prev = 0;
 
 // ---------- Motor 2 variables (independent of motor 1) ----------
 volatile int posi_2 = 0;
@@ -83,6 +85,8 @@ const float i_max_2 = 70;
 float kd_2 = 0;
 int e_prev_2 = 0;
 float d_term_2 = 0;
+float kv_2 = 0;
+int pos_prev_2 = 0;
 
 // ---------- Shared ----------
 int print_interval = 1000;  // how often values are sent to the serial monitor
@@ -111,6 +115,13 @@ const int pen_drop_index[] = { 0, 0, 100 };   // shape 1, 2 and 3
 // ---------- Homing / state machine ----------
 enum RigState { ST_IDLE, ST_HOMING, ST_HOMED, ST_RUNNING, ST_PAUSED }; // available states
 RigState state = ST_IDLE;                   // starts idle (motors off)
+
+// ---------- Final trajectory settling ----------
+const int FINAL_TOLERANCE = 3;
+const unsigned long FINAL_SETTLE_MS = 200;
+bool trajectory_complete = false;
+bool final_settle_timing = false;
+unsigned long final_settle_since = 0;
 
 const int U_MAX_RUN  = 150;                 // Amplitude limit while drawing shape
 const int U_MAX_HOME = 80;                  // Amplitude limit while homing
@@ -209,11 +220,15 @@ void loop() {
         setLimits(U_MAX_RUN);             // Sets max amplitude to running limit
         time_start   = millis();
         time_start_2 = millis();
+        trajectory_complete = false;
+        final_settle_timing = false;
+        final_settle_since = 0;
         state = ST_RUNNING;
         Serial.println("RUNNING");
         break;
 
       case ST_RUNNING:                    // BTN Allows pause during running
+        final_settle_timing = false;
         state = ST_PAUSED;
         Serial.println("PAUSED");
         break;
@@ -221,6 +236,7 @@ void loop() {
       case ST_PAUSED:                     // BTN Resumes from the current point
         time_start   = millis();
         time_start_2 = millis();
+        final_settle_timing = false;
         resetController();
         state = ST_RUNNING;
         Serial.println("RUNNING");
@@ -245,17 +261,13 @@ void loop() {
   }
 
   // ===================== MOTOR 1 =====================
-  // Setpoint only advances encoder points while the shape drawing is running; homing/homed states hold encoder point 0
-  if (state == ST_RUNNING && (millis() - time_start) > time_per_point) {
-    point_index++; // adds 1 !!!
-    time_start = millis();
-    if (point_index >= shape_len[shape]) {
-      state = ST_IDLE;     // stop after one pass; next press re-homes
-      point_index   = 0;
-      point_index_2 = 0;
-      shape = (shape + 1) % NUM_SHAPES;   // next run draws the next shape
-      return;              // the idle block switches the motors off next loop
+  // Advance the reference while drawing, but hold the final point for settling.
+  if (state == ST_RUNNING && !trajectory_complete &&
+      (millis() - time_start) > time_per_point) {
+    if (point_index < shape_len[shape] - 1) {
+      point_index++;
     }
+    time_start = millis();
   }
   ref = shapes_m1[shape][point_index]; // sets reference point
 
@@ -265,17 +277,20 @@ void loop() {
 
   e = ref - pos; // calcs error
 
+// state: int pos_prev, pos_prev_2;
   if (d_update) {
-    float d_raw = (e - e_prev) / dt;
+    float d_raw = -(pos - pos_prev) / dt;   // = d(error)/dt with ref held constant
     d_term = d_alpha * d_raw + (1 - d_alpha) * d_term;
-    e_prev = e;
+    pos_prev = pos;
 
     e_sum += e * dt;
     if (ki > 0) e_sum = constrain(e_sum, -i_max / ki, i_max / ki);
     if (state == ST_RUNNING && (abs(kp * e + kd * d_term) < 90)) e_sum = 0;
   }
 
-  u_f = (kp * e + ki * e_sum + kd * d_term); // calcs control signal amplitude from PID
+  int nxt = min(point_index + 1, shape_len[shape] - 1);
+  float ref_vel = (shapes_m1[shape][nxt] - shapes_m1[shape][point_index]) / (time_per_point / 1000.0f); // counts/s
+  u_f = (kp*e + ki*e_sum + kd*d_term + kv*ref_vel);
 
   // Homing/homed: inside the tolerance band, stop driving and clear the integral
   if (state == ST_HOMED && abs(e) <= HOME_TOLERANCE) {
@@ -297,9 +312,20 @@ void loop() {
   setMotor(u_sign, u_amplitude, PWM_pin, IN1, IN2); // Carries out motor 1 function with these variables
 
   // ===================== MOTOR 2 =====================
-  if (state == ST_RUNNING && (millis() - time_start_2) > time_per_point_2) {
-    point_index_2 = (point_index_2 + 1) % shape_len[shape];   // wraps
+  // Advance the reference while drawing, but do not wrap to the start.
+  if (state == ST_RUNNING && !trajectory_complete &&
+      (millis() - time_start_2) > time_per_point_2) {
+    if (point_index_2 < shape_len[shape] - 1) {
+      point_index_2++;
+    }
     time_start_2 = millis();
+  }
+
+  // Start final settling only once both motors have reached their last reference.
+  if (state == ST_RUNNING &&
+      point_index >= shape_len[shape] - 1 &&
+      point_index_2 >= shape_len[shape] - 1) {
+    trajectory_complete = true;
   }
   ref_2 = shapes_m2[shape][point_index_2];
 
@@ -310,16 +336,18 @@ void loop() {
   e_2 = ref_2 - pos_2;
 
   if (d_update) {
-    float d_raw_2 = (e_2 - e_prev_2) / dt;
+    float d_raw_2 = -(pos_2 - pos_prev_2) / dt;   // = d(error)/dt with ref held constant
     d_term_2 = d_alpha * d_raw_2 + (1 - d_alpha) * d_term_2;
-    e_prev_2 = e_2;
+    pos_prev_2 = pos_2;
 
     e_sum_2 += e_2 * dt;
     if (ki_2 > 0) e_sum_2 = constrain(e_sum_2, -i_max_2 / ki_2, i_max_2 / ki_2);
     if (state == ST_RUNNING && (abs(kp_2 * e_2 + kd_2 * d_term_2) < 90)) e_sum_2 = 0;
   }
 
-  u_f_2 = (kp_2 * e_2 + ki_2 * e_sum_2 + kd_2 * d_term_2);
+  int nxt_2 = min(point_index_2 + 1, shape_len[shape] - 1);
+  float ref_vel_2 = (shapes_m2[shape][nxt_2] - shapes_m2[shape][point_index_2]) / (time_per_point_2 / 1000.0f); // counts/s
+  u_f_2 = (kp_2 * e_2 + ki_2 * e_sum_2 + kd_2 * d_term_2 + kv_2 * ref_vel_2);
 
   if (state == ST_HOMED && abs(e_2) <= HOME_TOLERANCE) {
     u_f_2 = 0;
@@ -336,6 +364,39 @@ void loop() {
   }
 
   setMotor(u_sign_2, u_amplitude_2, PWM_pin_2, IN3, IN4);
+
+  // ===================== FINAL TRAJECTORY SETTLING =====================
+  if (state == ST_RUNNING && trajectory_complete) {
+    bool in_band = (abs(e) <= FINAL_TOLERANCE &&
+                    abs(e_2) <= FINAL_TOLERANCE);
+
+    if (in_band) {
+      if (!final_settle_timing) {
+        final_settle_timing = true;
+        final_settle_since = millis();
+      }
+      else if (millis() - final_settle_since >= FINAL_SETTLE_MS) {
+        Serial.println("FINAL POSITION REACHED");
+
+        // Stop both motors and finish this shape.
+        setMotor(0, 0, PWM_pin, IN1, IN2);
+        setMotor(0, 0, PWM_pin_2, IN3, IN4);
+        state = ST_IDLE;
+
+        point_index = 0;
+        point_index_2 = 0;
+        shape = (shape + 1) % NUM_SHAPES;
+
+        trajectory_complete = false;
+        final_settle_timing = false;
+        final_settle_since = 0;
+      }
+    }
+    else {
+      // Both motors must remain inside the tolerance band continuously.
+      final_settle_timing = false;
+    }
+  }
 
   // ===================== HOMING SETTLED? CHECK =====================
   if (state == ST_HOMING) {
@@ -397,9 +458,8 @@ void resetController() {
   e_sum = 0;    e_sum_2 = 0;
   d_term = 0;   d_term_2 = 0;
 
-  ATOMIC() { pos = posi; pos_2 = posi_2; }
-  e_prev   = shapes_m1[shape][point_index]     - pos;
-  e_prev_2 = shapes_m2[shape][point_index_2] - pos_2;
+  pos_prev = pos;
+  pos_prev_2 = pos_2;
 }
 
 // Send PWM signal to motor driver (shared by both motors)
